@@ -9,7 +9,7 @@ function PLUGIN:PostInstall(ctx)
     local path = sdkInfo.path
     local version = sdkInfo.version
     local binary = platform.binary_name()
-    local is_windows = RUNTIME.osType == "Windows"
+    local is_windows = RUNTIME.osType == "windows"
 
     -- Step 1: Locate the extracted binary.
     -- npm tarballs extract with a package/ prefix. Check both locations

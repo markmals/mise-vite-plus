@@ -7,7 +7,7 @@
 ------------------------------------------------------------------------
 
 ---@class Runtime
----@field osType string Operating system type (e.g. "linux", "darwin", "windows")
+---@field osType string Operating system type: "linux", "darwin", or "windows" (always lowercase)
 ---@field archType string Architecture type (e.g. "amd64", "arm64")
 ---@field version string Runtime version
 ---@field pluginDirPath string Path to the plugin directory

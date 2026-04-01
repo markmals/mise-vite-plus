@@ -11,11 +11,11 @@ local M = {}
 --- @return string os_token e.g. "darwin", "linux", "win32"
 local function os_token()
     local os_type = RUNTIME.osType
-    if os_type == "Darwin" then
+    if os_type == "darwin" then
         return "darwin"
-    elseif os_type == "Linux" then
+    elseif os_type == "linux" then
         return "linux"
-    elseif os_type == "Windows" then
+    elseif os_type == "windows" then
         return "win32"
     end
     error("Unsupported operating system: " .. tostring(os_type))
@@ -74,7 +74,7 @@ end
 --- Returns the binary filename for the current platform.
 --- @return string binary_name "vp.exe" on Windows, "vp" otherwise
 function M.binary_name()
-    if RUNTIME.osType == "Windows" then
+    if RUNTIME.osType == "windows" then
         return "vp.exe"
     end
     return "vp"
