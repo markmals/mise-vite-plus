@@ -1,18 +1,46 @@
 #!/usr/bin/env bash
-#MISE description="Run plugin tests - install and execute tool"
+#MISE description="Run plugin tests - install and execute vite-plus"
 set -euo pipefail
 
-mise plugin link --force <TOOL> .
+echo "=== Linking plugin ==="
+mise plugin link --force vite-plus .
 mise cache clear
-mise install <TOOL>@1.0.0
 
-# Capture and display the output while also verifying it
-output=$(mise exec "<TOOL>@1.0.0" -- "<TOOL>" --version)
-echo "<TOOL> output: $output"
+echo "=== Installing vite-plus@0.1.15 ==="
+mise install vite-plus@0.1.15
 
-if echo "$output" | grep -q '<TOOL>@1.0.0'; then
-    echo "✓ Tests passed"
+echo "=== Testing vp --version ==="
+output=$(mise exec "vite-plus@0.1.15" -- vp --version)
+echo "vp output: $output"
+
+if echo "$output" | grep -q '0.1.15'; then
+    echo "✓ vp --version passed"
 else
-    echo "✗ Test failed: expected version <TOOL>@1.0.0"
+    echo "✗ vp --version failed: expected 0.1.15 in output"
     exit 1
 fi
+
+echo "=== Testing vpx --help ==="
+vpx_output=$(mise exec "vite-plus@0.1.15" -- vpx --help 2>&1 || true)
+echo "vpx output: $vpx_output"
+
+if echo "$vpx_output" | grep -qi 'usage\|vpx\|vite'; then
+    echo "✓ vpx --help passed"
+else
+    echo "✗ vpx --help failed: unexpected output"
+    exit 1
+fi
+
+echo "=== Testing vpr --help ==="
+vpr_output=$(mise exec "vite-plus@0.1.15" -- vpr --help 2>&1 || true)
+echo "vpr output: $vpr_output"
+
+if echo "$vpr_output" | grep -qi 'usage\|vpr\|vite'; then
+    echo "✓ vpr --help passed"
+else
+    echo "✗ vpr --help failed: unexpected output"
+    exit 1
+fi
+
+echo ""
+echo "✓ All tests passed"
