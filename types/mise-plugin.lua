@@ -9,6 +9,7 @@
 ---@class Runtime
 ---@field osType string Operating system type: "linux", "darwin", or "windows" (always lowercase)
 ---@field archType string Architecture type (e.g. "amd64", "arm64")
+---@field envType? string libc environment type: "gnu" on glibc Linux, "musl" on musl Linux, nil on Windows/macOS
 ---@field version string Runtime version
 ---@field pluginDirPath string Path to the plugin directory
 RUNTIME = {}

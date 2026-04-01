@@ -4,11 +4,12 @@
 --- @return EnvKey[]
 function PLUGIN:EnvKeys(ctx)
     local mainPath = ctx.path
+    local file = require("file")
 
     return {
         {
             key = "PATH",
-            value = mainPath .. "/bin",
+            value = file.join_path(mainPath, "bin"),
         },
     }
 end
