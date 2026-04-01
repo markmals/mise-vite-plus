@@ -8,6 +8,6 @@
   },
   "workspace": {
     "checkThirdParty": false,
-    "library": ["types"]
+    "library": ["types", "lib"]
   }
 }
