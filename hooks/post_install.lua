@@ -63,18 +63,16 @@ function PLUGIN:PostInstall(ctx)
     end
 
     -- Step 5: Write wrapper package.json
-    local pkg_json = "{\n"
+    -- stylua: ignore start
+    local pkg_json = '{\n'
         .. '  "name": "vp-global",\n'
-        .. '  "version": "'
-        .. version
-        .. '",\n'
+        .. '  "version": "' .. version .. '",\n'
         .. '  "private": true,\n'
         .. '  "dependencies": {\n'
-        .. '    "vite-plus": "'
-        .. version
-        .. '"\n'
-        .. "  }\n"
-        .. "}\n"
+        .. '    "vite-plus": "' .. version .. '"\n'
+        .. '  }\n'
+        .. '}\n'
+    -- stylua: ignore end
     local pkg_file = assert(io.open(file.join_path(path, "package.json"), "w"))
     pkg_file:write(pkg_json)
     pkg_file:close()
@@ -91,25 +89,23 @@ function PLUGIN:PostInstall(ctx)
     -- failure. Isolate PATH so the calling project's mise env (has_mise_env=true)
     -- cannot shadow this wrapper's vp/Node.
     local install_log = file.join_path(path, "install.log")
-    local install_cmd
+    local isolated_path = bin_dir .. ":/usr/bin:/bin:/usr/sbin:/sbin"
+    local install_cmd = 'cd "'
+        .. path
+        .. '" && env -u INIT_CWD CI=true PATH="'
+        .. isolated_path
+        .. '" "'
+        .. dest_binary
+        .. '" install > "'
+        .. install_log
+        .. '" 2>&1'
     if is_windows then
-        local isolated_path = bin_dir .. ";C:\\Windows\\System32;C:\\Windows"
+        isolated_path = bin_dir .. ";C:\\Windows\\System32;C:\\Windows"
         install_cmd = 'cd /d "'
             .. path
-            .. '" && set CI=true&& set PATH='
+            .. '" && set CI=true && set PATH='
             .. isolated_path
             .. '&& "'
-            .. dest_binary
-            .. '" install > "'
-            .. install_log
-            .. '" 2>&1'
-    else
-        local isolated_path = bin_dir .. ":/usr/bin:/bin:/usr/sbin:/sbin"
-        install_cmd = 'cd "'
-            .. path
-            .. '" && env -u INIT_CWD CI=true PATH="'
-            .. isolated_path
-            .. '" "'
             .. dest_binary
             .. '" install > "'
             .. install_log
