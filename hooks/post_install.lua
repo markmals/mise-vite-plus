@@ -1,5 +1,26 @@
 --- Performs additional setup after Mise downloads and extracts the Vite+ tarball.
 --- Documentation: https://mise.jdx.dev/tool-plugin-development.html#postinstall-hook
+
+--- Mise wraps Lua os.execute with `sh -c -o errexit` and typically returns a numeric
+--- exit code. Native Lua 5.2+ returns `true` on success. Treat both as success.
+--- @param result any
+--- @return boolean
+local function command_succeeded(result)
+    return result == true or result == 0
+end
+
+--- @param path string
+--- @return string
+local function read_all(path)
+    local fh = io.open(path, "r")
+    if not fh then
+        return ""
+    end
+    local content = fh:read("*a") or ""
+    fh:close()
+    return content
+end
+
 --- @param ctx PostInstallCtx
 function PLUGIN:PostInstall(ctx)
     local platform = require("platform")
@@ -10,6 +31,7 @@ function PLUGIN:PostInstall(ctx)
     local version = sdkInfo.version
     local binary = platform.binary_name()
     local is_windows = RUNTIME.osType == "windows"
+    local public_npm = "https://registry.npmjs.org"
 
     -- Step 1: Locate the extracted binary.
     -- npm tarballs extract with a package/ prefix. Check both locations
@@ -32,7 +54,7 @@ function PLUGIN:PostInstall(ctx)
     -- Step 3: Move binary into bin/ and make executable
     local dest_binary = file.join_path(bin_dir, binary)
     local mv_result = os.execute('mv "' .. src_binary .. '" "' .. dest_binary .. '"')
-    if mv_result ~= 0 then
+    if not command_succeeded(mv_result) then
         error("Failed to move " .. binary .. " to " .. dest_binary)
     end
     if not is_windows then
@@ -62,38 +84,80 @@ function PLUGIN:PostInstall(ctx)
     end
 
     -- Step 5: Write wrapper package.json
-    local pkg_json = '{\n'
+    local pkg_json = "{\n"
         .. '  "name": "vp-global",\n'
-        .. '  "version": "' .. version .. '",\n'
+        .. '  "version": "'
+        .. version
+        .. '",\n'
         .. '  "private": true,\n'
         .. '  "dependencies": {\n'
-        .. '    "vite-plus": "' .. version .. '"\n'
-        .. '  }\n'
-        .. '}\n'
+        .. '    "vite-plus": "'
+        .. version
+        .. '"\n'
+        .. "  }\n"
+        .. "}\n"
     local pkg_file = assert(io.open(file.join_path(path, "package.json"), "w"))
     pkg_file:write(pkg_json)
     pkg_file:close()
 
-    -- Step 6: Write .npmrc to bypass publish delay restrictions
-    local npmrc_file = assert(io.open(file.join_path(path, ".npmrc"), "w"))
-    npmrc_file:write("minimum-release-age=0\nmin-release-age=0\n")
+    -- Step 6: Write .npmrc. Pin the public npm registry and min-release-age 0
+    -- so a user-level ~/.npmrc cannot redirect or delay the JS CLI bootstrap
+    -- (matches the official installer).
+    local npmrc_path = file.join_path(path, ".npmrc")
+    local npmrc_file = assert(io.open(npmrc_path, "w"))
+    npmrc_file:write("registry=" .. public_npm .. "\nminimum-release-age=0\nmin-release-age=0\n")
     npmrc_file:close()
 
-    -- Step 7: Run vp install --silent to bootstrap JS dependencies
+    -- Step 7: Run `vp install` to bootstrap JS dependencies.
+    -- Do not use --silent: a redirected silent run can produce an empty log on
+    -- failure. Isolate PATH and npm userconfig so the calling project's mise env
+    -- (has_mise_env=true) and ~/.npmrc cannot shadow this wrapper package.
     local install_log = file.join_path(path, "install.log")
-    local install_cmd = 'cd "' .. path .. '" && CI=true "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
+    local install_cmd
     if is_windows then
-        install_cmd = 'cd /d "' .. path .. '" && set CI=true && "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
+        local isolated_path = bin_dir .. ";C:\\Windows\\System32;C:\\Windows"
+        install_cmd = 'cd /d "'
+            .. path
+            .. '" && set CI=true&& set NPM_CONFIG_USERCONFIG='
+            .. npmrc_path
+            .. "&& set npm_config_userconfig="
+            .. npmrc_path
+            .. "&& set NPM_CONFIG_REGISTRY="
+            .. public_npm
+            .. "&& set PATH="
+            .. isolated_path
+            .. '&& "'
+            .. dest_binary
+            .. '" install > "'
+            .. install_log
+            .. '" 2>&1'
+    else
+        local isolated_path = bin_dir .. ":/usr/bin:/bin:/usr/sbin:/sbin"
+        install_cmd = 'cd "'
+            .. path
+            .. '" && env -u INIT_CWD CI=true NPM_CONFIG_USERCONFIG="'
+            .. npmrc_path
+            .. '" npm_config_userconfig="'
+            .. npmrc_path
+            .. '" NPM_CONFIG_REGISTRY="'
+            .. public_npm
+            .. '" PATH="'
+            .. isolated_path
+            .. '" "'
+            .. dest_binary
+            .. '" install > "'
+            .. install_log
+            .. '" 2>&1'
     end
     local install_result = os.execute(install_cmd)
-    if install_result ~= 0 then
-        local log_content = ""
-        local log_fh = io.open(install_log, "r")
-        if log_fh then
-            log_content = log_fh:read("*a")
-            log_fh:close()
+    if not command_succeeded(install_result) then
+        local log_content = read_all(install_log)
+        if log_content == "" then
+            log_content = "(no output captured)"
         end
-        error("Failed to install Vite+ JS dependencies. Log:\n" .. log_content)
+        error(
+            "Failed to install Vite+ JS dependencies (status " .. tostring(install_result) .. "). Log:\n" .. log_content
+        )
     end
 
     -- Step 8: Create ~/.vite-plus/current symlink
@@ -114,9 +178,9 @@ function PLUGIN:PostInstall(ctx)
         env_cmd = '"' .. dest_binary .. '" env setup --env-only > nul 2>&1'
     end
     local env_result = os.execute(env_cmd)
-    if env_result ~= 0 then
+    if not command_succeeded(env_result) then
         -- Warn but don't error — env setup is non-critical for basic operation
-        io.stderr:write("warn: vp env setup --env-only failed (exit code " .. tostring(env_result) .. ")\n")
+        io.stderr:write("warn: vp env setup --env-only failed (status " .. tostring(env_result) .. ")\n")
     end
 
     -- Clean up extracted package/ directory if it still exists

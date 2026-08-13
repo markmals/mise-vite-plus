@@ -2,45 +2,54 @@
 #MISE description="Run plugin tests - install and execute vite-plus"
 set -euo pipefail
 
+test_version() {
+    local ver=$1
+    echo "=== Installing vite-plus@${ver} ==="
+    mise install "vite-plus@${ver}"
+
+    echo "=== Testing vp --version (${ver}) ==="
+    local output
+    output=$(mise exec "vite-plus@${ver}" -- vp --version)
+    echo "vp output: $output"
+
+    if echo "$output" | grep -q "${ver}"; then
+        echo "✓ vp --version passed"
+    else
+        echo "✗ vp --version failed: expected ${ver} in output"
+        exit 1
+    fi
+
+    echo "=== Testing vpx --help (${ver}) ==="
+    local vpx_output
+    vpx_output=$(mise exec "vite-plus@${ver}" -- vpx --help 2>&1 || true)
+    echo "vpx output: $vpx_output"
+
+    if echo "$vpx_output" | grep -qi 'usage\|vpx\|vite'; then
+        echo "✓ vpx --help passed"
+    else
+        echo "✗ vpx --help failed: unexpected output"
+        exit 1
+    fi
+
+    echo "=== Testing vpr --help (${ver}) ==="
+    local vpr_output
+    vpr_output=$(mise exec "vite-plus@${ver}" -- vpr --help 2>&1 || true)
+    echo "vpr output: $vpr_output"
+
+    if echo "$vpr_output" | grep -qi 'usage\|vpr\|vite'; then
+        echo "✓ vpr --help passed"
+    else
+        echo "✗ vpr --help failed: unexpected output"
+        exit 1
+    fi
+}
+
 echo "=== Linking plugin ==="
 mise plugin link --force vite-plus .
 mise cache clear
 
-echo "=== Installing vite-plus@0.1.15 ==="
-mise install vite-plus@0.1.15
-
-echo "=== Testing vp --version ==="
-output=$(mise exec "vite-plus@0.1.15" -- vp --version)
-echo "vp output: $output"
-
-if echo "$output" | grep -q '0.1.15'; then
-    echo "✓ vp --version passed"
-else
-    echo "✗ vp --version failed: expected 0.1.15 in output"
-    exit 1
-fi
-
-echo "=== Testing vpx --help ==="
-vpx_output=$(mise exec "vite-plus@0.1.15" -- vpx --help 2>&1 || true)
-echo "vpx output: $vpx_output"
-
-if echo "$vpx_output" | grep -qi 'usage\|vpx\|vite'; then
-    echo "✓ vpx --help passed"
-else
-    echo "✗ vpx --help failed: unexpected output"
-    exit 1
-fi
-
-echo "=== Testing vpr --help ==="
-vpr_output=$(mise exec "vite-plus@0.1.15" -- vpr --help 2>&1 || true)
-echo "vpr output: $vpr_output"
-
-if echo "$vpr_output" | grep -qi 'usage\|vpr\|vite'; then
-    echo "✓ vpr --help passed"
-else
-    echo "✗ vpr --help failed: unexpected output"
-    exit 1
-fi
+test_version "0.1.15"
+test_version "0.2.9"
 
 echo ""
 echo "✓ All tests passed"
