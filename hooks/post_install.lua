@@ -84,22 +84,12 @@ function PLUGIN:PostInstall(ctx)
 
     -- Step 7: Run vp install --silent to bootstrap JS dependencies
     local install_log = file.join_path(path, "install.log")
-    local install_cmd = 'cd "'
-        .. path
-        .. '" && CI=true "'
-        .. dest_binary
-        .. '" install --silent > "'
-        .. install_log
-        .. '" 2>&1'
+    -- stylua: ignore start
+    local install_cmd = 'cd "' .. path .. '" && CI=true "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
     if is_windows then
-        install_cmd = 'cd /d "'
-            .. path
-            .. '" && set CI=true && "'
-            .. dest_binary
-            .. '" install --silent > "'
-            .. install_log
-            .. '" 2>&1'
+        install_cmd = 'cd /d "' .. path .. '" && set CI=true && "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
     end
+    -- stylua: ignore end
     local install_result = os.execute(install_cmd)
     if install_result ~= 0 then
         local log_content = ""
