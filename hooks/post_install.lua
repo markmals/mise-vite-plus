@@ -77,37 +77,26 @@ function PLUGIN:PostInstall(ctx)
     pkg_file:write(pkg_json)
     pkg_file:close()
 
-    -- Step 6: Project .npmrc only. Same layering as install.sh: this file
-    -- overlays ~/.npmrc (registry / minimum-release-age win; cafile, proxy,
-    -- https-proxy from the user file are kept). Do not set NPM_CONFIG_USERCONFIG.
+    -- Step 6: Write .npmrc (public registry + min release age; overlays ~/.npmrc)
     local npmrc_file = assert(io.open(file.join_path(path, ".npmrc"), "w"))
     npmrc_file:write("registry=" .. public_npm .. "\nminimum-release-age=0\n")
     npmrc_file:close()
 
-    -- Step 7: Run `vp install` to bootstrap JS dependencies.
-    -- Do not use --silent: a redirected silent run can produce an empty log on
-    -- failure. Isolate PATH so the calling project's mise env (has_mise_env=true)
-    -- cannot shadow this wrapper's vp/Node.
+    -- Step 7: Run vp install --silent to bootstrap JS dependencies
     local install_log = file.join_path(path, "install.log")
-    local isolated_path = bin_dir .. ":/usr/bin:/bin:/usr/sbin:/sbin"
     local install_cmd = 'cd "'
         .. path
-        .. '" && env -u INIT_CWD CI=true PATH="'
-        .. isolated_path
-        .. '" "'
+        .. '" && CI=true "'
         .. dest_binary
-        .. '" install > "'
+        .. '" install --silent > "'
         .. install_log
         .. '" 2>&1'
     if is_windows then
-        isolated_path = bin_dir .. ";C:\\Windows\\System32;C:\\Windows"
         install_cmd = 'cd /d "'
             .. path
-            .. '" && set CI=true && set PATH='
-            .. isolated_path
-            .. '&& "'
+            .. '" && set CI=true && "'
             .. dest_binary
-            .. '" install > "'
+            .. '" install --silent > "'
             .. install_log
             .. '" 2>&1'
     end

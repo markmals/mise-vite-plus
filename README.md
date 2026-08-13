@@ -49,7 +49,7 @@ The plugin replicates the behavior of the official [Vite+ installer](https://vit
 
 1. **Available** — Fetches all published versions from the npm registry.
 2. **PreInstall** — Resolves the platform-specific npm tarball URL (macOS/Linux, x64/arm64).
-3. **PostInstall** — Extracts the `vp` binary, creates `vpx`/`vpr` multicall symlinks, writes a `package.json` wrapper plus a project `.npmrc` that overlays `~/.npmrc` (public registry + `minimum-release-age=0`), runs `vp install` to bootstrap JS dependencies (isolated from the caller’s PATH), and sets up the `~/.vite-plus/current` symlink.
+3. **PostInstall** — Extracts the `vp` binary, creates `vpx`/`vpr` multicall symlinks, writes a `package.json` wrapper plus a project `.npmrc` that overlays `~/.npmrc` (public registry + `minimum-release-age=0`), runs `vp install --silent` to bootstrap JS dependencies, and sets up the `~/.vite-plus/current` symlink.
 4. **EnvKeys** — Adds `<install-dir>/bin` to `PATH`.
 
 ## Development
