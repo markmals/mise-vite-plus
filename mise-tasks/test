@@ -2,45 +2,105 @@
 #MISE description="Run plugin tests - install and execute vite-plus"
 set -euo pipefail
 
+# Project .npmrc overlays ~/.npmrc the way install.sh does: registry in the
+# project file wins, user-only keys (cafile, https-proxy) still apply.
+# NPM_CONFIG_USERCONFIG pointing at the project file would drop those keys.
+test_npmrc_overlay() {
+    echo "=== npmrc overlay (official installer layering) ==="
+    local tmp home project
+    tmp=$(mktemp -d)
+    home="$tmp/home"
+    project="$tmp/project"
+    mkdir -p "$home" "$project"
+    printf 'registry=https://example.invalid/\ncafile=/nonexistent/ca.pem\nhttps-proxy=http://127.0.0.1:9\n' >"$home/.npmrc"
+    printf 'registry=https://registry.npmjs.org\nminimum-release-age=0\n' >"$project/.npmrc"
+
+    local registry cafile proxy
+    registry=$(cd "$project" && HOME="$home" npm config get registry 2>/dev/null)
+    cafile=$(cd "$project" && HOME="$home" npm config get cafile 2>/dev/null)
+    proxy=$(cd "$project" && HOME="$home" npm config get https-proxy 2>/dev/null)
+
+    if [[ "$registry" != https://registry.npmjs.org* ]]; then
+        echo "✗ project registry did not overlay user registry (got: $registry)"
+        rm -rf "$tmp"
+        exit 1
+    fi
+    if [[ "$cafile" != "/nonexistent/ca.pem" ]]; then
+        echo "✗ user cafile was not preserved (got: $cafile)"
+        rm -rf "$tmp"
+        exit 1
+    fi
+    if [[ "$proxy" != "http://127.0.0.1:9" ]]; then
+        echo "✗ user https-proxy was not preserved (got: $proxy)"
+        rm -rf "$tmp"
+        exit 1
+    fi
+
+    local isolated_ca
+    isolated_ca=$(cd "$project" && HOME="$home" NPM_CONFIG_USERCONFIG="$project/.npmrc" npm config get cafile 2>/dev/null)
+    if [[ "$isolated_ca" == "/nonexistent/ca.pem" ]]; then
+        echo "✗ USERCONFIG isolation unexpectedly still saw user cafile"
+        rm -rf "$tmp"
+        exit 1
+    fi
+
+    echo "✓ project registry overlays user registry; cafile/https-proxy still apply"
+    rm -rf "$tmp"
+}
+
+test_version() {
+    local ver=$1
+    echo "=== Installing vite-plus@${ver} ==="
+    mise install "vite-plus@${ver}"
+
+    echo "=== Testing vp --version (${ver}) ==="
+    local output
+    output=$(mise exec "vite-plus@${ver}" -- vp --version)
+    echo "vp output: $output"
+
+    if echo "$output" | grep -q "${ver}"; then
+        echo "✓ vp --version passed"
+    else
+        echo "✗ vp --version failed: expected ${ver} in output"
+        exit 1
+    fi
+
+    echo "=== Testing vpx --help (${ver}) ==="
+    local vpx_output
+    vpx_output=$(mise exec "vite-plus@${ver}" -- vpx --help 2>&1 || true)
+    echo "vpx output: $vpx_output"
+
+    if echo "$vpx_output" | grep -qi 'usage\|vpx\|vite'; then
+        echo "✓ vpx --help passed"
+    else
+        echo "✗ vpx --help failed: unexpected output"
+        exit 1
+    fi
+
+    echo "=== Testing vpr --help (${ver}) ==="
+    local vpr_output
+    vpr_output=$(mise exec "vite-plus@${ver}" -- vpr --help 2>&1 || true)
+    echo "vpr output: $vpr_output"
+
+    if echo "$vpr_output" | grep -qi 'usage\|vpr\|vite'; then
+        echo "✓ vpr --help passed"
+    else
+        echo "✗ vpr --help failed: unexpected output"
+        exit 1
+    fi
+}
+
+test_npmrc_overlay
+
 echo "=== Linking plugin ==="
 mise plugin link --force vite-plus .
 mise cache clear
 
-echo "=== Installing vite-plus@0.1.15 ==="
-mise install vite-plus@0.1.15
+echo "=== Reinstall 0.2.9 against the real user ~/.npmrc ==="
+mise uninstall vite-plus@0.2.9 2>/dev/null || true
 
-echo "=== Testing vp --version ==="
-output=$(mise exec "vite-plus@0.1.15" -- vp --version)
-echo "vp output: $output"
-
-if echo "$output" | grep -q '0.1.15'; then
-    echo "✓ vp --version passed"
-else
-    echo "✗ vp --version failed: expected 0.1.15 in output"
-    exit 1
-fi
-
-echo "=== Testing vpx --help ==="
-vpx_output=$(mise exec "vite-plus@0.1.15" -- vpx --help 2>&1 || true)
-echo "vpx output: $vpx_output"
-
-if echo "$vpx_output" | grep -qi 'usage\|vpx\|vite'; then
-    echo "✓ vpx --help passed"
-else
-    echo "✗ vpx --help failed: unexpected output"
-    exit 1
-fi
-
-echo "=== Testing vpr --help ==="
-vpr_output=$(mise exec "vite-plus@0.1.15" -- vpr --help 2>&1 || true)
-echo "vpr output: $vpr_output"
-
-if echo "$vpr_output" | grep -qi 'usage\|vpr\|vite'; then
-    echo "✓ vpr --help passed"
-else
-    echo "✗ vpr --help failed: unexpected output"
-    exit 1
-fi
+test_version "0.1.15"
+test_version "0.2.9"
 
 echo ""
 echo "✓ All tests passed"

@@ -10,6 +10,7 @@ function PLUGIN:PostInstall(ctx)
     local version = sdkInfo.version
     local binary = platform.binary_name()
     local is_windows = RUNTIME.osType == "windows"
+    local public_npm = "https://registry.npmjs.org"
 
     -- Step 1: Locate the extracted binary.
     -- npm tarballs extract with a package/ prefix. Check both locations
@@ -62,6 +63,7 @@ function PLUGIN:PostInstall(ctx)
     end
 
     -- Step 5: Write wrapper package.json
+    -- stylua: ignore start
     local pkg_json = '{\n'
         .. '  "name": "vp-global",\n'
         .. '  "version": "' .. version .. '",\n'
@@ -70,21 +72,24 @@ function PLUGIN:PostInstall(ctx)
         .. '    "vite-plus": "' .. version .. '"\n'
         .. '  }\n'
         .. '}\n'
+    -- stylua: ignore end
     local pkg_file = assert(io.open(file.join_path(path, "package.json"), "w"))
     pkg_file:write(pkg_json)
     pkg_file:close()
 
-    -- Step 6: Write .npmrc to bypass publish delay restrictions
+    -- Step 6: Write .npmrc (public registry + min release age; overlays ~/.npmrc)
     local npmrc_file = assert(io.open(file.join_path(path, ".npmrc"), "w"))
-    npmrc_file:write("minimum-release-age=0\nmin-release-age=0\n")
+    npmrc_file:write("registry=" .. public_npm .. "\nminimum-release-age=0\n")
     npmrc_file:close()
 
     -- Step 7: Run vp install --silent to bootstrap JS dependencies
     local install_log = file.join_path(path, "install.log")
+    -- stylua: ignore start
     local install_cmd = 'cd "' .. path .. '" && CI=true "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
     if is_windows then
         install_cmd = 'cd /d "' .. path .. '" && set CI=true && "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
     end
+    -- stylua: ignore end
     local install_result = os.execute(install_cmd)
     if install_result ~= 0 then
         local log_content = ""
