@@ -10,6 +10,7 @@ function PLUGIN:PostInstall(ctx)
     local version = sdkInfo.version
     local binary = platform.binary_name()
     local is_windows = RUNTIME.osType == "windows"
+    local public_npm = "https://registry.npmjs.org"
 
     -- Step 1: Locate the extracted binary.
     -- npm tarballs extract with a package/ prefix. Check both locations
@@ -62,28 +63,70 @@ function PLUGIN:PostInstall(ctx)
     end
 
     -- Step 5: Write wrapper package.json
-    local pkg_json = '{\n'
+    local pkg_json = "{\n"
         .. '  "name": "vp-global",\n'
-        .. '  "version": "' .. version .. '",\n'
+        .. '  "version": "'
+        .. version
+        .. '",\n'
         .. '  "private": true,\n'
         .. '  "dependencies": {\n'
-        .. '    "vite-plus": "' .. version .. '"\n'
-        .. '  }\n'
-        .. '}\n'
+        .. '    "vite-plus": "'
+        .. version
+        .. '"\n'
+        .. "  }\n"
+        .. "}\n"
     local pkg_file = assert(io.open(file.join_path(path, "package.json"), "w"))
     pkg_file:write(pkg_json)
     pkg_file:close()
 
-    -- Step 6: Write .npmrc to bypass publish delay restrictions
-    local npmrc_file = assert(io.open(file.join_path(path, ".npmrc"), "w"))
-    npmrc_file:write("minimum-release-age=0\nmin-release-age=0\n")
+    -- Step 6: Write .npmrc. Pin the public npm registry and min-release-age 0
+    -- so a user-level ~/.npmrc cannot redirect or delay the JS CLI bootstrap
+    -- (matches the official installer).
+    local npmrc_path = file.join_path(path, ".npmrc")
+    local npmrc_file = assert(io.open(npmrc_path, "w"))
+    npmrc_file:write("registry=" .. public_npm .. "\nminimum-release-age=0\nmin-release-age=0\n")
     npmrc_file:close()
 
-    -- Step 7: Run vp install --silent to bootstrap JS dependencies
+    -- Step 7: Run `vp install` to bootstrap JS dependencies.
+    -- Do not use --silent: a redirected silent run can produce an empty log on
+    -- failure. Isolate PATH and npm userconfig so the calling project's mise env
+    -- (has_mise_env=true) and ~/.npmrc cannot shadow this wrapper package.
     local install_log = file.join_path(path, "install.log")
-    local install_cmd = 'cd "' .. path .. '" && CI=true "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
+    local install_cmd
     if is_windows then
-        install_cmd = 'cd /d "' .. path .. '" && set CI=true && "' .. dest_binary .. '" install --silent > "' .. install_log .. '" 2>&1'
+        local isolated_path = bin_dir .. ";C:\\Windows\\System32;C:\\Windows"
+        install_cmd = 'cd /d "'
+            .. path
+            .. '" && set CI=true&& set NPM_CONFIG_USERCONFIG='
+            .. npmrc_path
+            .. "&& set npm_config_userconfig="
+            .. npmrc_path
+            .. "&& set NPM_CONFIG_REGISTRY="
+            .. public_npm
+            .. "&& set PATH="
+            .. isolated_path
+            .. '&& "'
+            .. dest_binary
+            .. '" install > "'
+            .. install_log
+            .. '" 2>&1'
+    else
+        local isolated_path = bin_dir .. ":/usr/bin:/bin:/usr/sbin:/sbin"
+        install_cmd = 'cd "'
+            .. path
+            .. '" && env -u INIT_CWD CI=true NPM_CONFIG_USERCONFIG="'
+            .. npmrc_path
+            .. '" npm_config_userconfig="'
+            .. npmrc_path
+            .. '" NPM_CONFIG_REGISTRY="'
+            .. public_npm
+            .. '" PATH="'
+            .. isolated_path
+            .. '" "'
+            .. dest_binary
+            .. '" install > "'
+            .. install_log
+            .. '" 2>&1'
     end
     local install_result = os.execute(install_cmd)
     if install_result ~= 0 then
